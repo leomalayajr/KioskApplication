@@ -36,7 +36,10 @@ namespace KioskApplication
         System.Timers.Timer timer10 = new System.Timers.Timer();
 
         public string PROGRAM_Name = string.Empty;
-        public bool PROGRAM_Customer = true;
+        public bool PROGRAM_Guest = true;
+        public string PROGRAM_Student_No = string.Empty;
+
+        int counter = 0;
         #endregion
 
         public Form1()
@@ -57,9 +60,56 @@ namespace KioskApplication
 
         }
         #region MAIN METHODS
+        private void studentSubmit(int myKey)
+        {
+            SqlConnection con = new SqlConnection(connection_string);
+            using (con)
+            {
+                con.Open();
+                SqlCommand cmd2 = con.CreateCommand();
+                cmd2.CommandType = CommandType.Text;
+                // NOTE : THIS IS BARELY UPDATED.
+                // Recent update : March 27, 2018
+                // UPDATE immediately after receiving student database from sir
+                String query2 = "insert into Main_Queue (Queue_Number,Full_Name,Servicing_Office,Student_No,Transaction_Type,Type,Time,Pattern_Current,Pattern_Max,Customer_Queue_Number,Queue_Status,Customer_From) OUTPUT Inserted.id";
+                query2 += " values (@q_qn,@q_fn,@q_so,@q_sn,@q_tt,1,GETDATE(),@q_pc,@q_pm,@q_cqn,@q_qs,@q_cf)";
+
+                int _tt_id = myKey;
+                int _f_so = getFirstServicingOffice(_tt_id);
+                int c = getQueueNumber(con, _f_so);
+                string gqsn = generateQueueShortName(_tt_id, c);
+
+                cmd2 = new SqlCommand(query2, con);
+                cmd2.Parameters.AddWithValue("@q_qn", c);
+                cmd2.Parameters.AddWithValue("@q_fn", PROGRAM_Name);
+                cmd2.Parameters.AddWithValue("@q_so", _f_so); // 02 - 01 - 18 -- insert the first servicing office!
+                cmd2.Parameters.AddWithValue("@q_sn", PROGRAM_Student_No);
+                cmd2.Parameters.AddWithValue("@q_tt", _tt_id); // Note -> this was changed on March 2, 2018
+                cmd2.Parameters.AddWithValue("@q_pc", 1);
+                cmd2.Parameters.AddWithValue("@q_pm", retrievePatternMax(_tt_id));
+                cmd2.Parameters.AddWithValue("@q_cqn", gqsn);
+                cmd2.Parameters.AddWithValue("@q_ps", "Waiting");
+                cmd2.Parameters.AddWithValue("@q_cf", 0);
+                Console.Write("--INSERTING TO Main_Queue--");
+                newID = (int)cmd2.ExecuteScalar();
+
+                //setQueueTicket function here -- uncomment after student db received
+                //setQueueTicket(con, _tt_id, _f_so, PROGRAM_Student_No, gqsn, c);
+
+                shownID = c;
+                //new_transaction_queue(con, _tt_id);
+                Form2 f2 = new Form2();
+                f2.ShowDialog();
+                con.Close();
+                textBox1.Clear();
+
+                // timer2.Start();
+                Console.Write("--INSERTING TO Main_Queue--");
+            }
+        }
         private void guestSubmit(int myKey)
         {
-
+            counter++;
             SqlConnection con = new SqlConnection(connection_string);
             using (con)
             {
@@ -119,7 +169,7 @@ namespace KioskApplication
 
 
             }
-
+            Console.WriteLine(counter);
         }
         #endregion
         #region HELPING METHODS
@@ -191,7 +241,10 @@ namespace KioskApplication
                     SqlCommand CMD_Count_ServingTime = new SqlCommand(QUERY_Count_ServingTime, con);
                     CMD_Count_ServingTime.Parameters.AddWithValue("@param1", _ServicingOffice);
                     double temp_time = 0;
-                    if ((int)CMD_Count_ServingTime.ExecuteScalar() > 4)
+                    int time_count = (int)CMD_Count_ServingTime.ExecuteScalar();
+                    Console.WriteLine("time counts->"+time_count);
+                    Console.WriteLine("param1 -> " + _ServicingOffice);
+                    if ( time_count > 4)
                     {
                         // Give customer estimated time
                         // Retrieve avg time first 
@@ -226,7 +279,7 @@ namespace KioskApplication
 
                 }
             }
-            label10.Text = _student_no;
+            label10.Text = PROGRAM_Name;
             label8.Text = _cqn;
             //num2Counter.Text = _so_name;
             // important
@@ -474,7 +527,7 @@ namespace KioskApplication
             {
                 temp_pattern_no = (int)row["Pattern_No"];
                 temp_transaction_id = (int)row["Transaction_ID"];
-                Console.Write(" \n retrieving the first servicing office ");
+                Console.WriteLine(" retrieving the first servicing office ");
                 if (q_tt == temp_transaction_id && temp_pattern_no == 1)
                 {
                     a = (int)row["Servicing_Office"];
@@ -604,7 +657,7 @@ namespace KioskApplication
             // Student Button
             label5.Text = "Please provide your ID number.";
             panel4.Visible = true;
-            PROGRAM_Customer = false;
+            PROGRAM_Guest = false;
         }
 
         public void guest_button(object sender, EventArgs e)
@@ -612,7 +665,7 @@ namespace KioskApplication
             // Guest Button
             label5.Text = "Please provide your name.";
             panel4.Visible = true;
-            PROGRAM_Customer = true;
+            PROGRAM_Guest = true;
         }
 
         public Boolean checkInfoField()
@@ -637,9 +690,51 @@ namespace KioskApplication
                 MessageBox.Show("Please provide your information!");
             }else
             {
-                // Show next Panel / all transaction type.
-                panel5.Visible = true;
-                PROGRAM_Name = textBox1.Text;
+                if (PROGRAM_Guest)
+                {
+                    // Show next Panel / all transaction type.
+                    panel5.Visible = true;
+                    PROGRAM_Name = textBox1.Text;
+                }
+                else
+                {
+                    try
+                    {
+                        SqlConnection con = new SqlConnection(connection_string);
+                        using (con)
+                        {
+                            con.Open();
+                            int count = 0;
+                            SqlCommand cmd = con.CreateCommand();
+                            cmd.CommandType = CommandType.Text;
+                            String query = "select Fullname, StudentNo from vw_es_students where StudentNo = '" + textBox1.Text + "'";
+                            String fullname = "";
+                            cmd = new SqlCommand(query, con);
+                            SqlDataReader dr;
+                            dr = cmd.ExecuteReader();
+                            while (dr.Read())
+                            {
+                                count += 1;
+                                fullname = dr.GetString(0);
+                            }
+                            if (count == 1)
+                            {
+                                panel5.Visible = true;
+                                PROGRAM_Name = textBox1.Text;
+                            }
+                            else
+                            {
+                                MessageBox.Show("Student ID not found.");
+                            }
+                            con.Close();
+                        }
+                    }
+                    catch (SqlException exd)
+                    {
+                        MessageBox.Show("Unable to process request to retrieve Student Number. Contact an administrator.","Database error");
+                    }
+                    
+                }
             }
         }
 
@@ -712,19 +807,24 @@ namespace KioskApplication
             // Pick Button
             var myKey = transaction_type.First(x => x.Value == ((Button)sender).Name).Key;
 
+            // myKey -> transaction_type_id
+
             // find out if the customer is a student or guest
             // false for customer, true for guest
-            if (PROGRAM_Customer)
+            if (PROGRAM_Guest)
             {
                 guestSubmit(myKey);
             }
             else
             {
-               
+                studentSubmit(myKey);
             }
 
             // add more info on giving queue number
             panel6.Visible = true;
+            PROGRAM_Guest = true;
+            PROGRAM_Name = string.Empty;
+            PROGRAM_Student_No = string.Empty;
         }
 
         public void rate_button(object sender, EventArgs e)
