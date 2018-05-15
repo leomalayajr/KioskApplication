@@ -62,6 +62,7 @@ namespace KioskApplication
             timer1.Start();
 
             // from queue app on import 
+            checkIfOnline();
             newID = 0;
             shownID = 0;
             timer10.Start();
@@ -71,6 +72,32 @@ namespace KioskApplication
 
         }
         #region MAIN METHODS
+        private void checkIfOnline()
+        {
+            SqlConnection con = new SqlConnection(connection_string);
+            string query = "select id from Queue_Info";
+            SqlCommand cmd = new SqlCommand(query, con);
+            con.Open();
+            var b = cmd.ExecuteScalar();
+            if (b == null)
+            {
+                MessageBox.Show("Please initialize the queuing system first.", "Critical Error!");
+                Environment.Exit(0);
+            }
+            con.Close();
+        }
+        private void createNewRating(string CQN, bool isStudent, int Transaction_ID, int Servicing_Office, SqlConnection con)
+        {
+            String QUERY_create_RatingOffice_onNext = "insert into Rating_Office (Customer_Queue_Number,isStudent,Score,isGiven,Transaction_ID,Servicing_Office) " +
+                    " values " +
+                    " (@param_CQN,@param_isStudent,0,0,@param_tt_ID,@param_so)";
+            SqlCommand cmd = new SqlCommand(QUERY_create_RatingOffice_onNext, con);
+            cmd.Parameters.AddWithValue("@param_CQN",CQN);
+            cmd.Parameters.AddWithValue("@param_IsStudent", isStudent);
+            cmd.Parameters.AddWithValue("@param_tt_ID", Transaction_ID);
+            cmd.Parameters.AddWithValue("@param_so", Servicing_Office);
+            cmd.ExecuteNonQuery();
+        }
         private void studentSubmit(int myKey)
         {
             SqlConnection con = new SqlConnection(connection_string);
@@ -85,10 +112,12 @@ namespace KioskApplication
                 String query2 = "insert into Main_Queue (Queue_Number,Full_Name,Servicing_Office,Student_No,Transaction_Type,Type,Time,Pattern_Current,Pattern_Max,Customer_Queue_Number,Queue_Status,Customer_From) OUTPUT Inserted.id";
                 query2 += " values (@q_qn,@q_fn,@q_so,@q_sn,@q_tt,1,GETDATE(),@q_pc,@q_pm,@q_cqn,@q_qs,@q_cf)";
 
-                int _tt_id = myKey;
-                int _f_so = getFirstServicingOffice(_tt_id);
-                int c = getQueueNumber(con, _f_so);
-                string gqsn = generateQueueShortName(_tt_id, c);
+                
+                    int _tt_id = myKey;
+                    int _f_so = getFirstServicingOffice(_tt_id);
+                    int c = getQueueNumber(con, _f_so);
+                    string gqsn = generateQueueShortName(_tt_id, c);
+                
 
                 cmd2 = new SqlCommand(query2, con);
                 cmd2.Parameters.AddWithValue("@q_qn", c);
@@ -103,9 +132,10 @@ namespace KioskApplication
                 cmd2.Parameters.AddWithValue("@q_cf", 0);
                 Console.Write("--INSERTING TO Main_Queue--");
                 newID = (int)cmd2.ExecuteScalar();
-
                 //setQueueTicket function here -- uncomment after student db received
                 //setQueueTicket(con, _tt_id, _f_so, PROGRAM_Student_No, gqsn, c);
+
+                createNewRating(gqsn, true, _tt_id, _f_so, con);
 
                 shownID = c;
                 //new_transaction_queue(con, _tt_id);
@@ -165,10 +195,8 @@ namespace KioskApplication
                 newID = (int)cmd2.ExecuteScalar();
 
                 setQueueTicket(con, _tt_id, _f_so, "Guest", gqsn, c);
-                // Inserting to firebase - Main_Queue
-                // Function receives: Queue_Number, First_Servicing_Office,Student_No,Transaction_Type
-
-                // FirebaseFunction: Kiosk_Insert_MainQueue(c, _f_so, textBox1.Text, _tt_id, newID,gqsn);
+                
+                createNewRating(gqsn, false, _tt_id, _f_so, con);
 
                 shownID = c;
                 //new_transaction_queue(con, _tt_id);
@@ -402,7 +430,15 @@ namespace KioskApplication
             String query2 = "update Queue_Info set Current_Queue = Current_Queue+1 OUTPUT Inserted.Current_Queue where Servicing_Office = @Servicing_Office";
             cmd4 = new SqlCommand(query2, con);
             cmd4.Parameters.AddWithValue("@Servicing_Office", q_so);
-            b = (int)cmd4.ExecuteScalar();
+            try
+            {
+                b = (int)cmd4.ExecuteScalar();
+            }
+            catch (NullReferenceException)
+            {
+                MessageBox.Show("Information about Queue is not initialized yet. Please contact an admin!", "Critical Error");
+                Environment.Exit(0);
+            }
 
             // Update firebase -> Queue_Info > use the data processed and update the value
             // FirebaseFunction: Kiosk_Update_QueueInfo(b,q_so);
@@ -824,13 +860,20 @@ namespace KioskApplication
 
             // find out if the customer is a student or guest
             // false for customer, true for guest
-            if (PROGRAM_Guest)
+            try
             {
-                guestSubmit(myKey);
+                if (PROGRAM_Guest)
+                {
+                    guestSubmit(myKey);
+                }
+                else
+                {
+                    studentSubmit(myKey);
+                }
             }
-            else
+            catch (SqlException b)
             {
-                studentSubmit(myKey);
+                MessageBox.Show("Error ->"+b.Message,"Database error!");
             }
 
             // add more info on giving queue number
