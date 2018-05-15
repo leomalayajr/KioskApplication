@@ -9,6 +9,17 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Runtime.InteropServices;
 using System.Data.SqlClient;
+using KioskApplication.Properties;
+using System.Windows.Documents;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Shell;
+using System.IO;
+using iTextSharp.text;
+using iTextSharp.text.pdf;
+using iTextSharp.text.pdf.draw;
+using iTextSharp.text.pdf.parser;
+
 
 namespace KioskApplication
 {
@@ -274,7 +285,7 @@ namespace KioskApplication
                     else
                     {
                         // Estimated time = N/A
-                        label11.Text = "N/A";
+                        label11.Text = "Not enough customers to estimate serving time.";
                     }
 
                 }
@@ -795,7 +806,7 @@ namespace KioskApplication
                 newButton.Height = Height;
                 newButton.FlatStyle = FlatStyle.Flat;
                 newButton.TextAlign = ContentAlignment.MiddleCenter;
-                newButton.Font = new Font(newButton.Font.FontFamily, 22, FontStyle.Bold);
+                newButton.Font = new System.Drawing.Font(newButton.Font.FontFamily, 22, FontStyle.Bold);
                 newButton.Click += new EventHandler(pick_button);
                 this.flowLayoutPanel1.Controls.Add(newButton);
             }
@@ -804,6 +815,8 @@ namespace KioskApplication
 
         public void pick_button(object sender, EventArgs e)
         {
+            //buttonStatus("disable");
+            flowLayoutPanel1.Enabled = false;
             // Pick Button
             var myKey = transaction_type.First(x => x.Value == ((Button)sender).Name).Key;
 
@@ -825,6 +838,58 @@ namespace KioskApplication
             PROGRAM_Guest = true;
             PROGRAM_Name = string.Empty;
             PROGRAM_Student_No = string.Empty;
+
+
+            //Print Result;
+            this.TopMost = false;
+            getPrintResult();
+        }
+
+        public void getPrintResult()
+        {
+            Document doc = new Document();
+            PdfWriter writer = PdfWriter.GetInstance(doc, new FileStream("Receipt.pdf", FileMode.Create));
+            doc.Open();
+            PdfContentByte content = writer.DirectContent;
+
+            //Getting Image
+
+            iTextSharp.text.Image image = iTextSharp.text.Image.GetInstance("../../Resources/ReceiptHeader.png");
+            image.ScaleAbsolute(140f, 30f);
+            image.Alignment = Element.ALIGN_CENTER;
+
+            doc.Add(image);
+
+
+            // Setting Text paragraph
+            iTextSharp.text.Font fdefault = FontFactory.GetFont("Arial", 8, iTextSharp.text.Font.NORMAL, BaseColor.BLACK);
+
+            iTextSharp.text.Paragraph paragraph = new iTextSharp.text.Paragraph("Your Queue Number is:", fdefault);
+            paragraph.Alignment = Element.ALIGN_CENTER;
+            doc.Add(paragraph);
+
+            fdefault = FontFactory.GetFont("Arial", 24, iTextSharp.text.Font.BOLD, BaseColor.BLACK);
+            paragraph = new iTextSharp.text.Paragraph(label8.Text, fdefault);
+            paragraph.Alignment = Element.ALIGN_CENTER;
+            doc.Add(paragraph);
+
+            fdefault = FontFactory.GetFont("Arial", 6, iTextSharp.text.Font.NORMAL, BaseColor.BLACK);
+            paragraph = new iTextSharp.text.Paragraph("\nPlease wait for your number.", fdefault);
+            paragraph.Alignment = Element.ALIGN_CENTER;
+            doc.Add(paragraph);
+
+
+            content.Rectangle(225f, 690f, 150f, 120f);
+            content.Stroke();
+
+            //iTextSharp.text.Image image = iTextSharp.text.Image.GetInstance(new Uri(path));
+
+            //doc.Add(image);
+
+            doc.Close();
+
+            System.Diagnostics.Process.Start("Receipt.pdf");
+                
         }
 
         public void rate_button(object sender, EventArgs e)
@@ -852,6 +917,8 @@ namespace KioskApplication
         {
             if (GetIdleTime() >= 10000)
             {
+                this.TopMost = true;
+                flowLayoutPanel1.Enabled = true;
                 resetFields();
                 if(panel6.Visible == true)
                 {
@@ -876,5 +943,19 @@ namespace KioskApplication
                 }
             }
         }
+
+        //public void buttonStatus(String task)
+        //{
+        //    foreach(Control c in this.Controls)
+        //    {
+        //        if(c is Button && task == "enable")
+        //        {
+        //            c.Enabled = true;
+        //        }else if(c is Button && task == "disable")
+        //        {
+        //            c.Enabled = false;
+        //        }
+        //    }
+        //}
     }
 }
