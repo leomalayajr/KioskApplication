@@ -100,6 +100,7 @@
     <Compile Include="Rate.Designer.cs">
       <DependentUpon>Rate.cs</DependentUpon>
     </Compile>
+    <Compile Include="_Servicing_Office.cs" />
     <EmbeddedResource Include="Form1.resx">
       <DependentUpon>Form1.cs</DependentUpon>
     </EmbeddedResource>
@@ -136,7 +137,9 @@
     </Compile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="App.config" />
+    <None Include="App.config">
+      <SubType>Designer</SubType>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <None Include="Resources\IOS_BG.png" />
@@ -155,6 +158,30 @@
       <ProductName>.NET Framework 3.5 SP1</ProductName>
       <Install>false</Install>
     </BootstrapperPackage>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\banner.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\Rate.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\Rate1.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\confused.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\sad.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\smiling.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\Star_f.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\Star_nf.png" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

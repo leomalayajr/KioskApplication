@@ -41,6 +41,7 @@ namespace KioskApplication
         private int tickTime;
         private Label[] sb = new Label[7];
         private Label[] qb = new Label[7];
+
         DataTable table_Transactions;
         DataTable table_Transaction_Table;
         DataTable table_Servicing_Office;
@@ -51,6 +52,19 @@ namespace KioskApplication
         public string PROGRAM_Student_No = string.Empty;
 
         int counter = 0;
+
+        //Transaction Type counter
+        int transCounter = 0;
+        int tempTransCounter = 0;
+        int Height = 0;
+        int Width = 0;
+
+        //Getting idForPrint
+        int transactionID;
+        float addHeight = 0;
+
+        //George Here
+        Array[] offices;
         #endregion
 
         public Form1()
@@ -58,6 +72,8 @@ namespace KioskApplication
             InitializeComponent();
             flowLayoutPanel1.AutoScrollPosition = new Point(0, 0);
             autoGenerateButton();
+            timer2.Enabled = true;
+            timer2.Start();
             timer1.Enabled = true;
             timer1.Start();
 
@@ -106,6 +122,8 @@ namespace KioskApplication
                 con.Open();
                 SqlCommand cmd2 = con.CreateCommand();
                 cmd2.CommandType = CommandType.Text;
+
+
                 // NOTE : THIS IS BARELY UPDATED.
                 // Recent update : March 27, 2018
                 // UPDATE immediately after receiving student database from sir
@@ -128,26 +146,68 @@ namespace KioskApplication
                 cmd2.Parameters.AddWithValue("@q_pc", 1);
                 cmd2.Parameters.AddWithValue("@q_pm", retrievePatternMax(_tt_id));
                 cmd2.Parameters.AddWithValue("@q_cqn", gqsn);
-                cmd2.Parameters.AddWithValue("@q_ps", "Waiting");
+                cmd2.Parameters.AddWithValue("@q_qs", "Waiting");
                 cmd2.Parameters.AddWithValue("@q_cf", 0);
                 Console.Write("--INSERTING TO Main_Queue--");
                 newID = (int)cmd2.ExecuteScalar();
                 //setQueueTicket function here -- uncomment after student db received
-                //setQueueTicket(con, _tt_id, _f_so, PROGRAM_Student_No, gqsn, c);
+                setQueueTicket(con, _tt_id, _f_so, PROGRAM_Student_No, gqsn, c);
 
                 createNewRating(gqsn, true, _tt_id, _f_so, con);
 
                 shownID = c;
                 //new_transaction_queue(con, _tt_id);
-                Form2 f2 = new Form2();
-                f2.ShowDialog();
+
+
+                
+                // George Here | Inserting Data to Logs...
+                String logQuery = "insert into Controller_Queue_Log (Log_Title, Log_Text) values (@param_type, @param_SO_NAME)";
+
+                SqlCommand cmd3 = new SqlCommand(logQuery, con);
+                cmd3.Parameters.AddWithValue("@param_type", "Kiosk");
+                cmd3.Parameters.AddWithValue("@param_SO_NAME", PROGRAM_Name + " joined the queue with transaction "+getTransactionName(_tt_id)+".");
+                cmd3.ExecuteNonQuery();
+                //upto here
+
+                time = 0;
                 con.Close();
+
                 textBox1.Clear();
 
                 // timer2.Start();
                 Console.Write("--INSERTING TO Main_Queue--");
             }
         }
+        private string getTransactionName(int _tt_id)
+        {
+            string transaction_name = "";
+            foreach (DataRow row in table_Transaction_Table.Rows)
+            {
+                int temp_id = (int)row["id"];
+                if (_tt_id == temp_id)
+                {
+                    transaction_name = (string)row["Transaction_Name"];
+                    break;
+                }
+            }
+            return transaction_name;
+        }
+
+        private string getServicingOfficeNameLog(int _so)
+        {
+            string servicing_office_Name = "";
+            foreach (DataRow row in table_Servicing_Office.Rows)
+            {
+                int temp_id = (int)row["id"];
+                if (_so == temp_id)
+                {
+                    servicing_office_Name = (string)row["Name"];
+                    break;
+                }
+            }
+            return servicing_office_Name;
+        }
+
         private void guestSubmit(int myKey)
         {
             counter++;
@@ -200,6 +260,12 @@ namespace KioskApplication
 
                 shownID = c;
                 //new_transaction_queue(con, _tt_id);
+                String logQuery = "insert into Controller_Queue_Log (Log_Title, Log_Text) values (@param_type, @param_SO_NAME)";
+
+                SqlCommand cmd3 = new SqlCommand(logQuery, con);
+                cmd3.Parameters.AddWithValue("@param_type", "Kiosk");
+                cmd3.Parameters.AddWithValue("@param_SO_NAME", PROGRAM_Name + " joined the queue with transaction " + getTransactionName(_tt_id)+ ".");
+                cmd3.ExecuteNonQuery();
                 time = 0;
                 con.Close();
 
@@ -754,7 +820,7 @@ namespace KioskApplication
                             int count = 0;
                             SqlCommand cmd = con.CreateCommand();
                             cmd.CommandType = CommandType.Text;
-                            String query = "select Fullname, StudentNo from vw_es_students where StudentNo = '" + textBox1.Text + "'";
+                            String query = "select Full_name, Student_No from vw_es_students where Student_No = '" + textBox1.Text + "'";
                             String fullname = "";
                             cmd = new SqlCommand(query, con);
                             SqlDataReader dr;
@@ -778,7 +844,7 @@ namespace KioskApplication
                     }
                     catch (SqlException exd)
                     {
-                        MessageBox.Show("Unable to process request to retrieve Student Number. Contact an administrator.","Database error");
+                        MessageBox.Show("Unable to process request to retrieve Student Number. Contact an administrator. Error->"+exd.Message,"Database error");
                     }
                     
                 }
@@ -820,33 +886,49 @@ namespace KioskApplication
 
         public void autoGenerateButton()
         {
-            int Height = flowLayoutPanel1.Height / 2;
-            int Width = flowLayoutPanel1.Width / 3;
+            if (Height == 0 && Width == 0)
+            {
+                Height = flowLayoutPanel1.Height / 2;
+                Width = (flowLayoutPanel1.Width / 3) - 7;
+            }
+
             SqlConnection con = new SqlConnection(connection_string);
             con.Open();
-            string query = "select * from Transaction_Type";
-            SqlCommand cmd = new SqlCommand(query, con);
-            SqlDataReader rdr;
-            rdr = cmd.ExecuteReader();
-            while (rdr.Read())
-            {
-                int id = (int)rdr["id"];
-                string transaction_name = (string)rdr["Transaction_Name"];
-                string description = (string)rdr["Description"];
-                transaction_type.Add(id, transaction_name);
+            // Counting Data rows;
+            string queryCount = "select count(*) from Transaction_Type";
+            SqlCommand cmdCount = new SqlCommand(queryCount, con);
+            tempTransCounter = (int)cmdCount.ExecuteScalar();
 
-                Button newButton = new Button();
-                newButton.Name = transaction_name;
-                newButton.Text = description;
-                newButton.Width = Width;
-                newButton.Height = Height;
-                newButton.FlatStyle = FlatStyle.Flat;
-                newButton.TextAlign = ContentAlignment.MiddleCenter;
-                newButton.Font = new System.Drawing.Font(newButton.Font.FontFamily, 22, FontStyle.Bold);
-                newButton.Click += new EventHandler(pick_button);
-                this.flowLayoutPanel1.Controls.Add(newButton);
+            if (transCounter == 0 || transCounter < tempTransCounter || transCounter > tempTransCounter)
+            {
+                transCounter = tempTransCounter;
+                transaction_type.Clear();
+                flowLayoutPanel1.Controls.Clear();
+                // Getting Data
+                string query = "select * from Transaction_Type";
+                SqlCommand cmd = new SqlCommand(query, con);
+                SqlDataReader rdr;
+                rdr = cmd.ExecuteReader();
+                while (rdr.Read())
+                {
+                    int id = (int)rdr["id"];
+                    string transaction_name = (string)rdr["Transaction_Name"];
+                    string description = (string)rdr["Description"];
+                    transaction_type.Add(id, transaction_name);
+
+                    Button newButton = new Button();
+                    newButton.Name = transaction_name;
+                    newButton.Text = description;
+                    newButton.Width = Width;
+                    newButton.Height = Height;
+                    newButton.FlatStyle = FlatStyle.Flat;
+                    newButton.TextAlign = ContentAlignment.MiddleCenter;
+                    newButton.Font = new System.Drawing.Font(newButton.Font.FontFamily, 22, FontStyle.Bold);
+                    newButton.Click += new EventHandler(pick_button);
+                    this.flowLayoutPanel1.Controls.Add(newButton);
+                }
+                con.Close();
             }
-            con.Close();
         }
 
         public void pick_button(object sender, EventArgs e)
@@ -855,7 +937,7 @@ namespace KioskApplication
             flowLayoutPanel1.Enabled = false;
             // Pick Button
             var myKey = transaction_type.First(x => x.Value == ((Button)sender).Name).Key;
-
+            transactionID = myKey;
             // myKey -> transaction_type_id
 
             // find out if the customer is a student or guest
@@ -921,8 +1003,11 @@ namespace KioskApplication
             paragraph.Alignment = Element.ALIGN_CENTER;
             doc.Add(paragraph);
 
+            paragraph = new iTextSharp.text.Paragraph(getTransactionOffices(), fdefault);
+            paragraph.Alignment = Element.ALIGN_CENTER;
+            doc.Add(paragraph);
 
-            content.Rectangle(225f, 690f, 150f, 120f);
+            content.Rectangle(225f, 690f-addHeight, 150f, 120f+addHeight);
             content.Stroke();
 
             //iTextSharp.text.Image image = iTextSharp.text.Image.GetInstance(new Uri(path));
@@ -933,6 +1018,39 @@ namespace KioskApplication
 
             System.Diagnostics.Process.Start("Receipt.pdf");
                 
+        }
+
+        public String getTransactionOffices()
+        {
+            String offices = "";
+            int counter = 0;
+
+            SqlConnection con = new SqlConnection(connection_string);
+            con.Open();
+
+            //string query = "select Name from Servicing_Office WHERE id IN ()";
+
+            string query = "select SO.Name FROM Transaction_List as TL LEFT JOIN Servicing_Office as SO ON TL.Servicing_Office = SO.id WHERE Transaction_ID = @param1";
+            SqlCommand cmd = new SqlCommand(query, con);
+            cmd.Parameters.AddWithValue("@param1", transactionID);
+            SqlDataReader rdr;
+            rdr = cmd.ExecuteReader();
+
+            while (rdr.Read())
+            {
+                counter++;
+                if(counter == 4)
+                {
+                    offices += "\n";
+                    addHeight += 5;
+                }
+
+                offices += rdr["Name"].ToString() + " -> ";
+
+            }
+
+            // return the string
+            return offices;
         }
 
         public void rate_button(object sender, EventArgs e)
@@ -954,13 +1072,40 @@ namespace KioskApplication
             return ((uint)Environment.TickCount - LastUserAction.dwTime);
         }
 
-        
+        private void timer2_Tick(object sender, EventArgs e)
+        {
+            autoGenerateButton();
+        }
+
+        private void button4_Click(object sender, EventArgs e)
+        {
+            if ((Application.OpenForms["Form2"] as Form2) != null)
+            {
+                //Form is already open
+            }
+            else
+            {
+                this.TopMost = false;
+                Form2 f2 = new Form2();
+                f2.Show();
+            }
+
+        }
 
         private void timer1_Tick(object sender, EventArgs e)
         {
-            if (GetIdleTime() >= 10000)
+            if (GetIdleTime() >= 2000)
             {
-                this.TopMost = true;
+                autoGenerateButton();
+
+                if ((Application.OpenForms["Form2"] as Form2) != null)
+                {
+                    //Form is already open
+                }else
+                {
+                    this.TopMost = true;
+                }
+
                 flowLayoutPanel1.Enabled = true;
                 resetFields();
                 if(panel6.Visible == true)
